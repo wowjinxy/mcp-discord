@@ -1,4 +1,5 @@
-discord.py>=2.4.0
-mcp>=0.1.0
 aiohttp>=3.8.0
+discord.py>=2.4.0
+mcp>=1.13.0
 python-dateutil>=2.8.0
+smithery>=0.1.23
