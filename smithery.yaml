@@ -1,1 +1,9 @@
 runtime: "python"
+remote: false
+entrypoint:
+  command: "mcp-discord"
+  args: []
+env:
+  DISCORD_TOKEN:
+    description: "Discord bot token used to authenticate the bot connection."
+    required: true
