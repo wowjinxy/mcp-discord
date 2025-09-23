@@ -1,13 +1,16 @@
+# Updated pyproject.toml dependencies section
 [project]
 name = "mcp-discord"
 version = "0.1.0"
 description = "Discord integration for Model Context Protocol"
 authors = [
-    {name = "Hanweg Altimer", email = "hanwegaltimer@outlook.com"},
+    {name = "wowjinxy", email = "drake1749@gmail.com"},
 ]
 dependencies = [
-    "discord.py>=2.3.0",
+    "discord.py>=2.4.0",  # Updated for AutoMod support
     "mcp>=0.1.0",
+    "aiohttp>=3.8.0",     # For webhook functionality
+    "python-dateutil>=2.8.0",  # For better date parsing
 ]
 requires-python = ">=3.10"
 readme = "README.md"
