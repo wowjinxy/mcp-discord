@@ -1,6 +1,6 @@
 # Updated pyproject.toml dependencies section
 [project]
-name = "mcp-discord"
+name = "mcp-discord-manager"
 version = "0.1.0"
 description = "Discord integration for Model Context Protocol"
 authors = [

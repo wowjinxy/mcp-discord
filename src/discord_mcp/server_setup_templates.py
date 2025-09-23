@@ -5,6 +5,7 @@ Templates and logic for AI-driven Discord server setup
 
 import re
 import json
+import discord
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
@@ -159,89 +160,25 @@ class ServerSetupAI:
             ]
         },
         
-        ServerType.EDUCATION: {
+        # Add other templates as needed...
+        ServerType.GENERAL: {
             "categories": [
-                {"name": "📚 Course Info", "type": "category"},
-                {"name": "🎓 Classes", "type": "category"},
-                {"name": "📝 Study Groups", "type": "category"},
-                {"name": "🔊 Lectures", "type": "category"},
-                {"name": "👨‍🏫 Staff", "type": "category"}
+                {"name": "📋 Information", "type": "category"},
+                {"name": "💬 General", "type": "category"},
+                {"name": "🔊 Voice", "type": "category"}
             ],
             "channels": [
-                # Course Info
-                {"name": "📋-syllabus", "type": "text", "category": "📚 Course Info"},
-                {"name": "📢-announcements", "type": "announcement", "category": "📚 Course Info"},
-                {"name": "📅-schedule", "type": "text", "category": "📚 Course Info"},
-                {"name": "❓-questions", "type": "forum", "category": "📚 Course Info"},
-                
-                # Classes
-                {"name": "📖-general-discussion", "type": "text", "category": "🎓 Classes"},
-                {"name": "💻-assignments", "type": "text", "category": "🎓 Classes"},
-                {"name": "📊-resources", "type": "text", "category": "🎓 Classes"},
-                
-                # Study Groups
-                {"name": "👥-study-room-1", "type": "voice", "category": "📝 Study Groups"},
-                {"name": "👥-study-room-2", "type": "voice", "category": "📝 Study Groups"},
-                {"name": "🔗-study-chat", "type": "text", "category": "📝 Study Groups"},
-                
-                # Lectures
-                {"name": "🎤-lecture-hall", "type": "stage", "category": "🔊 Lectures"},
-                {"name": "📹-recorded-lectures", "type": "text", "category": "🔊 Lectures"},
-                
-                # Staff
-                {"name": "👨‍🏫-teacher-lounge", "type": "text", "category": "👨‍🏫 Staff"},
-                {"name": "📊-grade-reports", "type": "text", "category": "👨‍🏫 Staff"}
+                {"name": "📜-rules", "type": "text", "category": "📋 Information"},
+                {"name": "📢-announcements", "type": "announcement", "category": "📋 Information"},
+                {"name": "💬-general", "type": "text", "category": "💬 General"},
+                {"name": "🗣️ General Voice", "type": "voice", "category": "🔊 Voice"}
             ],
             "roles": [
-                {"name": "👨‍🏫 Instructor", "color": "#e74c3c", "permissions": ["administrator"], "hoist": True},
-                {"name": "🎓 Teaching Assistant", "color": "#f39c12", "permissions": [
-                    "manage_messages", "mute_members", "move_members"
+                {"name": "👑 Owner", "color": "#e74c3c", "permissions": ["administrator"], "hoist": True},
+                {"name": "🔨 Moderator", "color": "#3498db", "permissions": [
+                    "kick_members", "ban_members", "manage_messages"
                 ], "hoist": True},
-                {"name": "📚 Student", "color": "#3498db", "permissions": ["send_messages"], "hoist": True},
-                {"name": "👁️ Auditor", "color": "#95a5a6", "permissions": ["view_channel"]}
-            ]
-        },
-        
-        ServerType.BUSINESS: {
-            "categories": [
-                {"name": "📋 Company Info", "type": "category"},
-                {"name": "💼 Departments", "type": "category"},
-                {"name": "🤝 Meetings", "type": "category"},
-                {"name": "📊 Projects", "type": "category"},
-                {"name": "🔧 Admin", "type": "category"}
-            ],
-            "channels": [
-                # Company Info
-                {"name": "📜-policies", "type": "text", "category": "📋 Company Info"},
-                {"name": "📢-announcements", "type": "announcement", "category": "📋 Company Info"},
-                {"name": "🎯-company-updates", "type": "text", "category": "📋 Company Info"},
-                
-                # Departments
-                {"name": "💻-it-support", "type": "text", "category": "💼 Departments"},
-                {"name": "📈-sales", "type": "text", "category": "💼 Departments"},
-                {"name": "🎨-marketing", "type": "text", "category": "💼 Departments"},
-                {"name": "👥-hr", "type": "text", "category": "💼 Departments"},
-                
-                # Meetings
-                {"name": "🏢-conference-room-a", "type": "voice", "category": "🤝 Meetings"},
-                {"name": "🏢-conference-room-b", "type": "voice", "category": "🤝 Meetings"},
-                {"name": "🎤-all-hands", "type": "stage", "category": "🤝 Meetings"},
-                
-                # Projects
-                {"name": "📊-project-updates", "type": "forum", "category": "📊 Projects"},
-                {"name": "🔗-resources", "type": "text", "category": "📊 Projects"},
-                
-                # Admin
-                {"name": "🛡️-management", "type": "text", "category": "🔧 Admin"},
-                {"name": "📊-reports", "type": "text", "category": "🔧 Admin"}
-            ],
-            "roles": [
-                {"name": "🏢 CEO", "color": "#e74c3c", "permissions": ["administrator"], "hoist": True},
-                {"name": "👔 Management", "color": "#f39c12", "permissions": [
-                    "manage_channels", "manage_roles", "kick_members"
-                ], "hoist": True},
-                {"name": "💼 Employee", "color": "#3498db", "permissions": ["send_messages"], "hoist": True},
-                {"name": "🤝 Contractor", "color": "#95a5a6", "permissions": ["send_messages"]}
+                {"name": "👥 Member", "color": "#95a5a6", "permissions": ["send_messages"]}
             ]
         }
     }
@@ -319,21 +256,7 @@ class ServerSetupAI:
             features.append("forum")
         
         analysis["features"] = features
-        
-        # Detect roles mentioned
-        role_keywords = {
-            "admin": ["admin", "administrator", "owner"],
-            "moderator": ["mod", "moderator", "staff"],
-            "vip": ["vip", "premium", "donor", "supporter"],
-            "member": ["member", "user", "participant"]
-        }
-        
-        mentioned_roles = []
-        for role_type, keywords in role_keywords.items():
-            if any(keyword in description.lower() for keyword in keywords):
-                mentioned_roles.append(role_type)
-        
-        analysis["roles"] = mentioned_roles
+        analysis["server_description"] = description
         
         return analysis
 
@@ -396,18 +319,6 @@ class ServerSetupAI:
                 "enabled": True
             })
         
-        # Mention spam protection
-        rules.append({
-            "name": "Mention Spam Protection",
-            "trigger_type": "mention_spam",
-            "mention_total_limit": 5,
-            "actions": [
-                {"type": "block_message"},
-                {"type": "timeout", "duration_seconds": 600}
-            ],
-            "enabled": True
-        })
-        
         return rules
 
     @classmethod
@@ -469,20 +380,10 @@ If you have questions or need to report an issue, please contact our staff membe
 **Remember**: These rules help keep our community safe and enjoyable for everyone!
         """.strip()
 
-# Usage example:
+# Usage functions
 def setup_server_from_description(server_id: str, description: str, server_type: str = "general") -> ServerSetupPlan:
     """
     Main function to set up a server from a natural language description
-    
-    Example usage:
-    description = '''
-    Create a gaming server called "Epic Gamers Unite" for competitive gaming.
-    We need voice channels for team coordination, announcement channels for tournaments,
-    roles for different game teams, and strict moderation for a family-friendly environment.
-    Include channels for different games like Valorant, League of Legends, and Minecraft.
-    '''
-    
-    plan = ServerSetupAI.parse_description(description, ServerType.GAMING)
     """
     
     try:
@@ -492,23 +393,27 @@ def setup_server_from_description(server_id: str, description: str, server_type:
     
     return ServerSetupAI.parse_description(description, server_type_enum)
 
-# Additional helper functions for implementation
+# Discord execution function
 async def execute_setup_plan(discord_client, server_id: str, plan: ServerSetupPlan) -> List[str]:
     """Execute the setup plan on the Discord server"""
     results = []
-    guild = await discord_client.fetch_guild(int(server_id))
     
     try:
+        guild = await discord_client.fetch_guild(int(server_id))
+        
         # Update server settings
         if plan.server_name or plan.description:
-            edit_kwargs = {}
-            if plan.server_name:
-                edit_kwargs["name"] = plan.server_name
-            if plan.description:
-                edit_kwargs["description"] = plan.description
-            
-            await guild.edit(**edit_kwargs, reason="AI-driven server setup")
-            results.append(f"✅ Updated server settings")
+            try:
+                edit_kwargs = {}
+                if plan.server_name:
+                    edit_kwargs["name"] = plan.server_name
+                if plan.description:
+                    edit_kwargs["description"] = plan.description
+                
+                await guild.edit(**edit_kwargs, reason="AI-driven server setup")
+                results.append(f"✅ Updated server settings")
+            except Exception as e:
+                results.append(f"❌ Failed to update server settings: {str(e)}")
         
         # Create roles first (in reverse order for hierarchy)
         created_roles = {}
@@ -587,51 +492,18 @@ async def execute_setup_plan(discord_client, server_id: str, plan: ServerSetupPl
                 else:
                     continue
                 
-                # Set channel permissions if specified
-                if channel_config.permissions:
-                    for perm_type, role_names in channel_config.permissions.items():
-                        for role_name in role_names:
-                            role = created_roles.get(role_name)
-                            if role:
-                                if perm_type == "view":
-                                    overwrite = discord.PermissionOverwrite(view_channel=True)
-                                elif perm_type == "send":
-                                    overwrite = discord.PermissionOverwrite(send_messages=True)
-                                elif perm_type == "manage":
-                                    overwrite = discord.PermissionOverwrite(manage_messages=True)
-                                else:
-                                    continue
-                                
-                                await channel.set_permissions(role, overwrite=overwrite)
-                
                 results.append(f"✅ Created {channel_config.type} channel: {channel_config.name}")
+                
+                # Add content to rules channel
+                if "rules" in channel_config.name.lower() and plan.rules_channel_content:
+                    try:
+                        await channel.send(plan.rules_channel_content)
+                        results.append(f"✅ Added rules content to {channel_config.name}")
+                    except Exception as e:
+                        results.append(f"⚠️ Created {channel_config.name} but couldn't add content: {str(e)}")
                 
             except Exception as e:
                 results.append(f"❌ Failed to create channel {channel_config.name}: {str(e)}")
-        
-        # Set up automod rules
-        for automod_config in plan.automod_rules:
-            try:
-                # Note: AutoMod setup would require discord.py with AutoMod support
-                # This is a placeholder for when that functionality is available
-                results.append(f"⚠️ AutoMod rule '{automod_config['name']}' - requires discord.py AutoMod support")
-                
-            except Exception as e:
-                results.append(f"❌ Failed to create automod rule {automod_config['name']}: {str(e)}")
-        
-        # Find and populate rules channel
-        rules_channel = None
-        for channel in guild.channels:
-            if "rules" in channel.name.lower() and hasattr(channel, 'send'):
-                rules_channel = channel
-                break
-        
-        if rules_channel and plan.rules_channel_content:
-            try:
-                await rules_channel.send(plan.rules_channel_content)
-                results.append(f"✅ Populated rules channel with content")
-            except Exception as e:
-                results.append(f"❌ Failed to populate rules channel: {str(e)}")
         
         # Send welcome message to general channel
         general_channel = None
@@ -645,7 +517,9 @@ async def execute_setup_plan(discord_client, server_id: str, plan: ServerSetupPl
                 await general_channel.send(plan.welcome_message)
                 results.append(f"✅ Sent welcome message to general channel")
             except Exception as e:
-                results.append(f"❌ Failed to send welcome message: {str(e)}")
+                results.append(f"⚠️ Failed to send welcome message: {str(e)}")
+        
+        results.append(f"🎉 Server setup completed! Created {len(created_categories)} categories, {len([r for r in results if 'Created' in r and 'channel' in r])} channels, and {len(created_roles)} roles.")
         
     except Exception as e:
         results.append(f"❌ General setup error: {str(e)}")
