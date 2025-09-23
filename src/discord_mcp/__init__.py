@@ -1,6 +1,8 @@
+# Replace your src/discord_mcp/__init__.py with this:
+
 """Discord integration for Model Context Protocol."""
 
-from . import server
+from . import integrated_server  # Changed from 'server' to 'integrated_server'
 import asyncio
 import warnings
 import tracemalloc
@@ -16,8 +18,8 @@ def main():
     warnings.filterwarnings('ignore', module='discord.client', message='PyNaCl is not installed')
     
     try:
-        # Properly handle async execution
-        asyncio.run(server.main())
+        # Use the integrated server with all advanced features
+        asyncio.run(integrated_server.main())
     except KeyboardInterrupt:
         print("\nShutting down Discord MCP server...")
     except Exception as e:
@@ -25,4 +27,4 @@ def main():
         raise
 
 # Expose important items at package level
-__all__ = ['main', 'server']
+__all__ = ['main', 'integrated_server']

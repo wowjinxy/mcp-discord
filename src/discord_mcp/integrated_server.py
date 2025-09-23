@@ -949,28 +949,47 @@ async def call_tool(name: str, arguments: Any) -> List[TextContent]:
                 text="❌ Invalid server ID format. Please provide a valid Discord server ID."
             )]
 
-        # Route to AI-driven server setup
+        # Route to AI-driven server setup - USE YOUR SOPHISTICATED IMPLEMENTATION
         if name == "setup_complete_server":
-            server_id = arguments["server_id"]
-            description = arguments["server_description"]
-            server_type = arguments.get("server_type", "general")
-            server_name = arguments.get("server_name")
+            logger.info(f"🤖 Starting AI-driven setup for server {arguments['server_id']}")
             
-            logger.info(f"Starting AI-driven setup for server {server_id}")
+            # Use your sophisticated AIServerManager instead of basic implementation
+            from .integration_complete import AIServerManager
             
-            # Generate AI-driven setup plan
-            plan = setup_server_from_description(server_id, description, server_type)
-            
-            if server_name:
-                plan.server_name = server_name
-            
-            # Execute the comprehensive setup plan
-            results = await execute_setup_plan(discord_client, server_id, plan)
-            
-            return [TextContent(
-                type="text",
-                text=f"🤖 **AI Server Setup Complete!**\n\n{chr(10).join(results)}"
-            )]
+            try:
+                # This uses your advanced setup with pre-flight checks, backups, health scoring, etc.
+                results = await AIServerManager.setup_complete_server(discord_client, arguments)
+                
+                # Format the comprehensive results
+                success_count = len([r for r in results if r.startswith('✅')])
+                error_count = len([r for r in results if r.startswith('❌')])
+                warning_count = len([r for r in results if r.startswith('⚠️')])
+                
+                # Create a beautiful summary
+                formatted_results = f"""
+🚀 **AI-Powered Discord Server Setup Complete!**
+
+**Results Summary:**
+✅ Successful Operations: {success_count}
+❌ Failed Operations: {error_count}  
+⚠️ Warnings: {warning_count}
+
+**Detailed Report:**
+{chr(10).join(results)}
+
+---
+🎉 **Your server is ready! Check your Discord server for the new structure.**
+                """.strip()
+                
+                return [TextContent(type="text", text=formatted_results)]
+                
+            except Exception as e:
+                error_msg = ErrorFormatter.format_discord_error(e)
+                logger.error(f"AI setup failed: {e}")
+                return [TextContent(
+                    type="text",
+                    text=f"❌ **AI Setup Failed**\n\nError: {error_msg}\n\nPlease check the logs and try again."
+                )]
 
         # Route to advanced feature handlers
         advanced_tools = [
@@ -1016,27 +1035,14 @@ async def call_tool(name: str, arguments: Any) -> List[TextContent]:
             type="text",
             text=f"❌ Unknown tool: {name}. Please check the available tools list."
         )]
-
-    except discord.Forbidden as e:
-        error_msg = ErrorFormatter.format_discord_error(e)
-        logger.error(f"Permission error in {name}: {e}")
-        return [TextContent(type="text", text=error_msg)]
-    
-    except discord.NotFound as e:
-        error_msg = ErrorFormatter.format_discord_error(e)
-        logger.error(f"Resource not found in {name}: {e}")
-        return [TextContent(type="text", text=error_msg)]
-    
-    except discord.HTTPException as e:
-        error_msg = ErrorFormatter.format_discord_error(e)
-        logger.error(f"Discord API error in {name}: {e}")
-        return [TextContent(type="text", text=error_msg)]
-    
+        
     except Exception as e:
-        error_msg = ErrorFormatter.format_discord_error(e)
-        logger.error(f"Unexpected error in {name}: {e}")
-        return [TextContent(type="text", text=error_msg)]
-
+        logger.error(f"Tool execution failed: {e}")
+        return [TextContent(
+            type="text",
+            text=f"❌ Tool execution failed: {str(e)}"
+        )]
+        
 async def main():
     """Main entry point - start Discord bot and MCP server"""
     try:
