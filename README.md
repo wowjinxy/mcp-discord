@@ -1,6 +1,6 @@
 # Discord MCP Server
 
-[![smithery badge](https://smithery.ai/badge/@hanweg/mcp-discord)](https://smithery.ai/server/@hanweg/mcp-discord)
+[![smithery badge](https://smithery.ai/badge/@wowjinxy/mcp-discord-manager)](https://smithery.ai/server/@wowjinxy/mcp-discord-manager)
 A Model Context Protocol (MCP) server that provides Discord integration capabilities to MCP clients like Claude Desktop.
 
 <a href="https://glama.ai/mcp/servers/wvwjgcnppa"><img width="380" height="200" src="https://glama.ai/mcp/servers/wvwjgcnppa/badge" alt="mcp-discord MCP server" /></a>
@@ -44,7 +44,7 @@ A Model Context Protocol (MCP) server that provides Discord integration capabili
 2. Clone and install the package:
 ```bash
 # Clone the repository
-git clone https://github.com/hanweg/mcp-discord.git
+git clone https://github.com/wowjinxy/mcp-discord.git
 cd mcp-discord
 
 # Create and activate virtual environment
@@ -57,7 +57,7 @@ uv venv
 uv pip install -e .
 ```
 
-3. Configure Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+3. Configure Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS) so it runs the installed entry point via `uv`:
 ```json
     "discord": {
       "command": "uv",
@@ -75,10 +75,10 @@ uv pip install -e .
 
 ### Installing via Smithery
 
-To install Discord Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@hanweg/mcp-discord):
+To install Discord Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@wowjinxy/mcp-discord-manager):
 
 ```bash
-npx -y @smithery/cli install @hanweg/mcp-discord --client claude
+npx -y @smithery/cli install @wowjinxy/mcp-discord-manager --client claude
 ```
 
 ## License
