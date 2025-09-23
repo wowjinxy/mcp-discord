@@ -649,10 +649,17 @@ class AdvancedToolHandlers:
             kwargs["unique"] = arguments["unique"]
         
         invite = await channel.create_invite(**kwargs)
-        
+
+        max_age = kwargs.get("max_age", 0)
+        expires_text = "Never" if max_age == 0 else f"{max_age} seconds"
+
         return [TextContent(
             type="text",
-            text=f"Created invite for #{channel.name}: {invite.url}\nCode: {invite.code}\nExpires: {'Never' if kwargs.get('max_age', 0) == 0 else f'{kwargs.get(\"max_age\", 0)} seconds'}"
+            text=(
+                f"Created invite for #{channel.name}: {invite.url}\n"
+                f"Code: {invite.code}\n"
+                f"Expires: {expires_text}"
+            )
         )]
 
     @staticmethod
