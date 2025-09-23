@@ -10,6 +10,7 @@ from discord.ext import commands
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 from mcp.server.stdio import stdio_server
+from .server_setup_templates import setup_server_from_description, execute_setup_plan
 
 def _configure_windows_stdout_encoding():
     if sys.platform == "win32":
