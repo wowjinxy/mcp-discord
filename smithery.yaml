@@ -6,4 +6,4 @@ entrypoint:
 env:
   DISCORD_TOKEN:
     description: "Discord bot token used to authenticate the bot connection."
-    required: true
+    required: false
