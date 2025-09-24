@@ -15,6 +15,18 @@ def test_config_schema_allows_missing_token():
     assert config.default_guild_id is None
 
 
+def test_config_schema_ignores_extra_fields():
+    config = ConfigSchema.model_validate({
+        "discordToken": " token ",
+        "defaultGuildId": 123,
+        "unexpected": "value",
+    })
+
+    assert config.discord_token == " token "
+    assert config.default_guild_id == 123
+    assert not hasattr(config, "unexpected")
+
+
 def test_initialize_allows_env_token(monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
     monkeypatch.delenv("DISCORD_DEFAULT_GUILD_ID", raising=False)
