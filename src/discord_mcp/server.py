@@ -170,6 +170,19 @@ def _normalize_token(token: str | None) -> str | None:
     if token is None:
         return None
     stripped = token.strip()
+    if not stripped:
+        return None
+
+    if (stripped.startswith("\"") and stripped.endswith("\"")) or (
+        stripped.startswith("'") and stripped.endswith("'")
+    ):
+        stripped = stripped[1:-1].strip()
+        if not stripped:
+            return None
+
+    if stripped.lower().startswith("bot "):
+        stripped = stripped[4:].strip()
+
     return stripped or None
 
 

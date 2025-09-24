@@ -66,3 +66,23 @@ def test_get_session_config_requires_token(monkeypatch):
 
     with pytest.raises(DiscordToolError):
         _get_session_config(_make_ctx({}))
+
+
+def test_get_session_config_strips_bot_prefix(monkeypatch):
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    monkeypatch.delenv("DISCORD_DEFAULT_GUILD_ID", raising=False)
+
+    resolved = _get_session_config(_make_ctx({"discordToken": " Bot session-token"}))
+
+    assert resolved.discord_token == "session-token"
+
+
+def test_get_session_config_strips_quotes(monkeypatch):
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    monkeypatch.delenv("DISCORD_DEFAULT_GUILD_ID", raising=False)
+
+    resolved = _get_session_config(
+        _make_ctx({"discordToken": ' "quoted-session-token" '})
+    )
+
+    assert resolved.discord_token == "quoted-session-token"
