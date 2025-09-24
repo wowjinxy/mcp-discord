@@ -36,9 +36,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("discord-mcp-server")
 
 # Discord bot setup
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("discordToken")
 if not DISCORD_TOKEN:
-    raise ValueError("DISCORD_TOKEN environment variable is required")
+    raise ValueError("DISCORD_TOKEN or discordToken environment variable is required")
 
 # Initialize Discord bot with necessary intents
 intents = discord.Intents.default()

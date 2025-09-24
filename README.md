@@ -57,7 +57,7 @@ uv venv
 uv pip install -e .
 ```
 
-3. Configure Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS) so it runs the installed entry point via `uv`. Provide your Discord token using either the MCP session configuration or the `DISCORD_TOKEN` environment variable:
+3. Configure Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS) so it runs the installed entry point via `uv`. Provide your Discord token using either the MCP session configuration or the `DISCORD_TOKEN`/`discordToken` environment variable:
 ```json
     "discord": {
       "command": "uv",
@@ -77,11 +77,13 @@ uv pip install -e .
 
 ```bash
 export DISCORD_TOKEN=your_bot_token
+## or use the camelCase environment name supported by some clients
+export discordToken=your_bot_token
 ```
 
 ### Installing via Smithery
 
-To install Discord Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@wowjinxy/mcp-discord-manager), ensure you supply the Discord token through your MCP client configuration (for example by setting `discordToken` in the session config) or by exporting `DISCORD_TOKEN` before starting the client:
+To install Discord Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@wowjinxy/mcp-discord-manager), ensure you supply the Discord token through your MCP client configuration (for example by setting `discordToken` in the session config) or by exporting `DISCORD_TOKEN`/`discordToken` before starting the client:
 
 ```bash
 npx -y @smithery/cli install @wowjinxy/mcp-discord-manager --client claude
