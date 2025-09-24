@@ -38,7 +38,7 @@ class ConfigSchema(BaseModel):
         description="Optional default Discord server (guild) ID used when a tool call omits server_id.",
     )
 
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
 
 class DiscordToolError(RuntimeError):
