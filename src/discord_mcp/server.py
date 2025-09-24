@@ -46,7 +46,8 @@ class DiscordToolError(RuntimeError):
 
 
 _MISSING_TOKEN_MESSAGE = (
-    "No Discord token provided. Configure a token via Smithery session config or the DISCORD_TOKEN environment variable."
+    "No Discord token provided. Configure a token via Smithery session config or the DISCORD_TOKEN/discordToken environment "
+    "variable."
 )
 
 
@@ -192,8 +193,24 @@ def _normalize_token(token: str | None) -> str | None:
 
 
 def _get_env_config() -> ConfigSchema:
-    token = _normalize_token(os.getenv("DISCORD_TOKEN"))
-    guild_raw = os.getenv("DISCORD_DEFAULT_GUILD_ID")
+    token: str | None = None
+    for env_name in ("DISCORD_TOKEN", "discordToken"):
+        candidate = _normalize_token(os.getenv(env_name))
+        if candidate is not None:
+            token = candidate
+            break
+
+    guild_raw: str | None = None
+    for env_name in ("DISCORD_DEFAULT_GUILD_ID", "discordDefaultGuildId", "defaultGuildId"):
+        value = os.getenv(env_name)
+        if value is None:
+            continue
+        stripped = value.strip()
+        if not stripped:
+            continue
+        guild_raw = stripped
+        break
+
     default_guild = int(guild_raw) if guild_raw else None
     return ConfigSchema(discord_token=token, default_guild_id=default_guild)
 
@@ -359,8 +376,8 @@ def create_server() -> FastMCP:
     server = FastMCP(
         name="Discord Server",
         instructions=(
-            "Interact with Discord using a bot token. Configure `discordToken` (or set the `DISCORD_TOKEN` environment "
-            "variable) and an optional `defaultGuildId` when connecting through Smithery."
+            "Interact with Discord using a bot token. Configure `discordToken` (or set the `DISCORD_TOKEN` or "
+            "`discordToken` environment variable) and an optional `defaultGuildId` when connecting through Smithery."
         ),
         lifespan=lifespan,
     )
