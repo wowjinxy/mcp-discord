@@ -86,3 +86,22 @@ def test_get_session_config_strips_quotes(monkeypatch):
     )
 
     assert resolved.discord_token == "quoted-session-token"
+
+
+def test_get_session_config_ignores_tokens_with_whitespace(monkeypatch):
+    monkeypatch.setenv("DISCORD_TOKEN", "env-token")
+    monkeypatch.delenv("DISCORD_DEFAULT_GUILD_ID", raising=False)
+
+    resolved = _get_session_config(
+        _make_ctx({"discordToken": " invalid token contents "})
+    )
+
+    assert resolved.discord_token == "env-token"
+
+
+def test_get_session_config_rejects_invalid_tokens(monkeypatch):
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    monkeypatch.delenv("DISCORD_DEFAULT_GUILD_ID", raising=False)
+
+    with pytest.raises(DiscordToolError):
+        _get_session_config(_make_ctx({"discordToken": "not a real token"}))

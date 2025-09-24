@@ -182,6 +182,11 @@ def _normalize_token(token: str | None) -> str | None:
 
     if stripped.lower().startswith("bot "):
         stripped = stripped[4:].strip()
+        if not stripped:
+            return None
+
+    if any(ch.isspace() for ch in stripped):
+        return None
 
     return stripped or None
 
