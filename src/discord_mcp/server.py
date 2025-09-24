@@ -24,10 +24,13 @@ logger = logging.getLogger("discord_mcp.server")
 class ConfigSchema(BaseModel):
     """Session configuration for the Discord MCP server."""
 
-    discord_token: str = Field(
-        ...,
+    discord_token: str | None = Field(
+        None,
         alias="discordToken",
-        description="Discord bot token with the required privileged intents enabled.",
+        description=(
+            "Discord bot token with the required privileged intents enabled. "
+            "Omit this when the DISCORD_TOKEN environment variable is set."
+        ),
     )
     default_guild_id: int | None = Field(
         None,
@@ -40,6 +43,11 @@ class ConfigSchema(BaseModel):
 
 class DiscordToolError(RuntimeError):
     """Raised when a Discord interaction cannot be completed."""
+
+
+_MISSING_TOKEN_MESSAGE = (
+    "No Discord token provided. Configure a token via Smithery session config or the DISCORD_TOKEN environment variable."
+)
 
 
 @dataclass(slots=True)
@@ -158,13 +166,15 @@ class DiscordClientManager:
                 self._entries.pop(token, None)
 
 
-def _get_env_config() -> ConfigSchema:
-    token = os.getenv("DISCORD_TOKEN", "").strip()
-    if not token:
-        raise DiscordToolError(
-            "No Discord token provided. Configure a token via Smithery session config or the DISCORD_TOKEN environment variable."
-        )
+def _normalize_token(token: str | None) -> str | None:
+    if token is None:
+        return None
+    stripped = token.strip()
+    return stripped or None
 
+
+def _get_env_config() -> ConfigSchema:
+    token = _normalize_token(os.getenv("DISCORD_TOKEN"))
     guild_raw = os.getenv("DISCORD_DEFAULT_GUILD_ID")
     default_guild = int(guild_raw) if guild_raw else None
     return ConfigSchema(discord_token=token, default_guild_id=default_guild)
@@ -173,10 +183,25 @@ def _get_env_config() -> ConfigSchema:
 def _get_session_config(ctx: Context) -> ConfigSchema:
     config = getattr(ctx, "session_config", None)
     if isinstance(config, ConfigSchema):
-        return config
-    if config is not None:
-        return ConfigSchema.model_validate(config)
-    return _get_env_config()
+        session_config = config
+    elif config is not None:
+        session_config = ConfigSchema.model_validate(config)
+    else:
+        session_config = ConfigSchema()
+
+    env_config = _get_env_config()
+
+    session_token = _normalize_token(session_config.discord_token)
+    env_token = _normalize_token(env_config.discord_token)
+    token = session_token or env_token
+    if token is None:
+        raise DiscordToolError(_MISSING_TOKEN_MESSAGE)
+
+    default_guild = session_config.default_guild_id
+    if default_guild is None:
+        default_guild = env_config.default_guild_id
+
+    return ConfigSchema(discord_token=token, default_guild_id=default_guild)
 
 
 def _require_int(value: str | int | None, name: str) -> int:
@@ -316,15 +341,18 @@ def create_server() -> FastMCP:
     server = FastMCP(
         name="Discord Server",
         instructions=(
-            "Interact with Discord using a bot token. Configure `discordToken` and an optional `defaultGuildId` "
-            "when connecting through Smithery."
+            "Interact with Discord using a bot token. Configure `discordToken` (or set the `DISCORD_TOKEN` environment "
+            "variable) and an optional `defaultGuildId` when connecting through Smithery."
         ),
         lifespan=lifespan,
     )
 
     async def _acquire(ctx: Context) -> tuple[commands.Bot, ConfigSchema]:
         config = _get_session_config(ctx)
-        bot = await _client_manager.get_bot(config.discord_token)
+        token = _normalize_token(config.discord_token)
+        if token is None:
+            raise DiscordToolError(_MISSING_TOKEN_MESSAGE)
+        bot = await _client_manager.get_bot(token)
         return bot, config
 
     @server.tool()
