@@ -6,6 +6,7 @@ from discord_mcp.server import (
     _parse_optional_bool,
     _parse_permissions,
 )
+from discord_mcp.utils import parse_permissions
 
 
 @pytest.mark.parametrize(
@@ -65,6 +66,14 @@ def test_parse_permissions_from_list():
     assert not perms.administrator
 
 
+def test_parse_permissions_accepts_common_aliases():
+    perms = _parse_permissions(["Admin", "Manage Channels", "manage-roles"], None)
+    assert perms is not None
+    assert perms.administrator
+    assert perms.manage_channels
+    assert perms.manage_roles
+
+
 def test_parse_permissions_from_value():
     perms = _parse_permissions(None, "1049600")
     assert perms is not None
@@ -78,3 +87,8 @@ def test_parse_permissions_unknown_name():
 
 def test_parse_permissions_none():
     assert _parse_permissions(None, None) is None
+
+
+def test_utils_parse_permissions_alias():
+    perms = parse_permissions(["Admin"])
+    assert perms.administrator
