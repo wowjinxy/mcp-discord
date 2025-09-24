@@ -5,5 +5,5 @@ entrypoint:
   args: []
 env:
   DISCORD_TOKEN:
-    description: "Discord bot token used to authenticate the bot connection."
+    description: "Discord bot token used to authenticate the bot connection when session config omits discordToken."
     required: false
