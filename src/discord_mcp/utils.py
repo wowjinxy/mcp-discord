@@ -17,6 +17,7 @@ def parse_permissions(permission_list: List[str]) -> discord.Permissions:
     # Map common permission names to discord.py attributes
     permission_mapping = {
         "administrator": "administrator",
+        "admin": "administrator",
         "manage_server": "manage_guild",
         "manage_guild": "manage_guild",
         "manage_channels": "manage_channels",
@@ -63,7 +64,7 @@ def parse_permissions(permission_list: List[str]) -> discord.Permissions:
     
     for perm in permission_list:
         # Convert to lowercase and handle variations
-        perm_lower = perm.lower().replace(" ", "_")
+        perm_lower = perm.lower().replace(" ", "_").replace("-", "_")
         
         # Map the permission
         discord_perm = permission_mapping.get(perm_lower, perm_lower)

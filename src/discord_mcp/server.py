@@ -396,6 +396,11 @@ def _parse_colour(value: str | int | None, *, name: str = "colour") -> discord.C
     raise DiscordToolError(f"{name} must be specified as a hex string or integer value.")
 
 
+_PERMISSION_ALIASES: dict[str, str] = {
+    "admin": "administrator",
+}
+
+
 def _parse_permissions(
     permissions: Sequence[str] | None,
     permissions_value: str | int | None,
@@ -415,6 +420,10 @@ def _parse_permissions(
     perms = discord.Permissions.none()
     for entry in permissions:
         normalized = str(entry).strip().lower()
+        if not normalized:
+            continue
+        normalized = normalized.replace(" ", "_").replace("-", "_")
+        normalized = _PERMISSION_ALIASES.get(normalized, normalized)
         if not normalized:
             continue
         if not hasattr(discord.Permissions, normalized):
