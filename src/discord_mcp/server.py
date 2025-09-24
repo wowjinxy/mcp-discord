@@ -303,6 +303,152 @@ async def _fetch_message(channel: Messageable, message_id: int) -> discord.Messa
     return await _call_discord("fetch message", channel.fetch_message(message_id))
 
 
+async def _ensure_member(guild: discord.Guild, user_id: int) -> discord.Member:
+    member = guild.get_member(user_id)
+    if member is not None:
+        return member
+    return await _call_discord("fetch member", guild.fetch_member(user_id))
+
+
+async def _ensure_role(guild: discord.Guild, role_id: int) -> discord.Role:
+    role = guild.get_role(role_id)
+    if role is not None:
+        return role
+
+    roles = await _call_discord("fetch roles", guild.fetch_roles())
+    for role in roles:
+        if role.id == role_id:
+            return role
+    raise DiscordToolError("Role not found in the specified server.")
+
+
+async def _ensure_category(
+    bot: commands.Bot, guild: discord.Guild, category_id: int
+) -> discord.CategoryChannel:
+    category = guild.get_channel(category_id)
+    if isinstance(category, discord.CategoryChannel):
+        return category
+
+    fetched = await _call_discord("fetch category", bot.fetch_channel(category_id))
+    if isinstance(fetched, discord.CategoryChannel):
+        return fetched
+    raise DiscordToolError("Provided category_id does not refer to a category.")
+
+
+def _parse_optional_bool(value: bool | str | int | None, name: str) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "off"}:
+            return False
+    raise DiscordToolError(f"{name} must be a boolean value.")
+
+
+def _parse_colour(value: str | int | None, *, name: str = "colour") -> discord.Colour | None:
+    if value is None:
+        return None
+    if isinstance(value, discord.Colour):
+        return value
+    if isinstance(value, int):
+        if 0 <= value <= 0xFFFFFF:
+            return discord.Colour(value)
+        raise DiscordToolError(f"{name} must be between 0 and 0xFFFFFF.")
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+
+        lowered = text.lower()
+        if lowered in {"default", "none"}:
+            return discord.Colour.default()
+        if lowered == "random":
+            return discord.Colour.random()
+
+        if lowered.startswith("#"):
+            lowered = lowered[1:]
+        if lowered.startswith("0x"):
+            lowered = lowered[2:]
+
+        try:
+            numeric = int(lowered, 16)
+        except ValueError:
+            attr = getattr(discord.Colour, lowered, None)
+            if callable(attr):
+                try:
+                    return attr()
+                except TypeError:  # pragma: no cover - defensive guard
+                    pass
+            raise DiscordToolError(
+                f"{name} must be a hex colour code (for example #FF0000) or a known colour name."
+            )
+
+        if 0 <= numeric <= 0xFFFFFF:
+            return discord.Colour(numeric)
+        raise DiscordToolError(f"{name} must be between 0 and 0xFFFFFF.")
+
+    raise DiscordToolError(f"{name} must be specified as a hex string or integer value.")
+
+
+def _parse_permissions(
+    permissions: Sequence[str] | None,
+    permissions_value: str | int | None,
+) -> discord.Permissions | None:
+    if permissions_value is not None:
+        try:
+            numeric = int(permissions_value)
+        except (TypeError, ValueError) as exc:
+            raise DiscordToolError("permissions_value must be an integer.") from exc
+        if numeric < 0:
+            raise DiscordToolError("permissions_value must be non-negative.")
+        return discord.Permissions(permissions=numeric)
+
+    if permissions is None:
+        return None
+
+    perms = discord.Permissions.none()
+    for entry in permissions:
+        normalized = str(entry).strip().lower()
+        if not normalized:
+            continue
+        if not hasattr(discord.Permissions, normalized):
+            raise DiscordToolError(f"Unknown permission name: {entry}.")
+        setattr(perms, normalized, True)
+    return perms
+
+
+def _summarize_permissions(perms: discord.Permissions, *, max_entries: int = 6) -> str:
+    allowed = [name.replace("_", " ") for name, value in perms if value]
+    if not allowed:
+        return "No permissions"
+    if len(allowed) > max_entries:
+        return ", ".join(allowed[:max_entries]) + ", ..."
+    return ", ".join(allowed)
+
+
+def _format_role(role: discord.Role) -> str:
+    colour = f"#{role.colour.value:06X}" if role.colour.value else "default"
+    flags: list[str] = []
+    if role.managed:
+        flags.append("managed")
+    if role.hoist:
+        flags.append("hoisted")
+    if role.mentionable:
+        flags.append("mentionable")
+    flag_str = f" ({', '.join(flags)})" if flags else ""
+    permissions = _summarize_permissions(role.permissions)
+    return (
+        f"• {role.name} (ID: {role.id}) – Position: {role.position} – Members: {len(role.members)} – "
+        f"Colour: {colour}{flag_str}\n  Permissions: {permissions}"
+    )
+
+
 def _format_channel_summary(channels: Sequence[discord.abc.GuildChannel]) -> str:
     by_category: dict[str, list[str]] = {}
     uncategorized: list[str] = []
@@ -454,6 +600,25 @@ def create_server() -> FastMCP:
         return f"**Channels for {guild.name}:**\n{summary}"
 
     @server.tool()
+    async def list_roles(server_id: str | int | None = None, ctx: Context = None) -> str:  # type: ignore[override]
+        """List all roles defined in the Discord server."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        roles = [role for role in guild.roles if role != guild.default_role]
+        if not roles:
+            return f"{guild.name} has no custom roles."
+
+        lines = [f"**Roles for {guild.name} (excluding @everyone):**"]
+        for role in sorted(roles, key=lambda item: item.position, reverse=True):
+            lines.append(_format_role(role))
+
+        return "\n".join(lines)
+
+    @server.tool()
     async def list_members(
         server_id: str | int | None = None,
         limit: int = 25,
@@ -581,6 +746,62 @@ def create_server() -> FastMCP:
         return f"Removed reaction {emoji} from message {message.id}."
 
     @server.tool()
+    async def pin_message(channel_id: str | int, message_id: str | int, reason: str | None = None, ctx: Context = None) -> str:  # type: ignore[override]
+        """Pin a message in a text channel."""
+
+        assert ctx is not None
+        bot, _ = await _acquire(ctx)
+        channel = await _ensure_channel(bot, _require_int(channel_id, "channel_id"))
+        message = await _fetch_message(channel, _require_int(message_id, "message_id"))
+        await _call_discord("pin message", message.pin(reason=reason))
+        return f"Pinned message {message.id} in channel {channel.id}."
+
+    @server.tool()
+    async def unpin_message(channel_id: str | int, message_id: str | int, reason: str | None = None, ctx: Context = None) -> str:  # type: ignore[override]
+        """Unpin a message in a text channel."""
+
+        assert ctx is not None
+        bot, _ = await _acquire(ctx)
+        channel = await _ensure_channel(bot, _require_int(channel_id, "channel_id"))
+        message = await _fetch_message(channel, _require_int(message_id, "message_id"))
+        await _call_discord("unpin message", message.unpin(reason=reason))
+        return f"Unpinned message {message.id} in channel {channel.id}."
+
+    @server.tool()
+    async def bulk_delete_messages(
+        channel_id: str | int,
+        message_ids: Sequence[str | int] | None = None,
+        limit: int | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Delete multiple recent messages from a channel."""
+
+        assert ctx is not None
+        bot, _ = await _acquire(ctx)
+        channel = await _ensure_channel(bot, _require_int(channel_id, "channel_id"))
+
+        deleted_count = 0
+        if message_ids:
+            for mid in message_ids:
+                message = await _fetch_message(channel, _require_int(mid, "message_id"))
+                await _call_discord("delete message", message.delete(reason=reason))
+                deleted_count += 1
+        else:
+            if limit is None:
+                raise DiscordToolError("Provide message_ids or a limit when using bulk_delete_messages.")
+            limit = max(1, min(limit, 100))
+
+            try:
+                async for message in channel.history(limit=limit, oldest_first=False):
+                    await _call_discord("delete message", message.delete(reason=reason))
+                    deleted_count += 1
+            except discord.DiscordException as exc:
+                raise _describe_discord_error("bulk delete messages", exc) from exc
+
+        return f"Deleted {deleted_count} message(s) from channel {channel.id}."
+
+    @server.tool()
     async def create_text_channel(
         name: str,
         server_id: str | int | None = None,
@@ -598,15 +819,196 @@ def create_server() -> FastMCP:
 
         category = None
         if category_id is not None:
-            category = await _call_discord("fetch category", guild.fetch_channel(_require_int(category_id, "category_id")))
-            if not isinstance(category, discord.CategoryChannel):
-                raise DiscordToolError("Provided category_id does not refer to a category.")
+            category = await _ensure_category(
+                bot, guild, _require_int(category_id, "category_id")
+            )
 
         channel = await _call_discord(
             "create channel",
             guild.create_text_channel(name=name, category=category, topic=topic, reason=reason),
         )
         return f"Created text channel {channel.name} (ID: {channel.id})."
+
+    @server.tool()
+    async def create_voice_channel(
+        name: str,
+        server_id: str | int | None = None,
+        category_id: str | int | None = None,
+        user_limit: int | None = None,
+        bitrate: int | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Create a new voice channel in the specified server."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        category = None
+        if category_id is not None:
+            category = await _ensure_category(
+                bot, guild, _require_int(category_id, "category_id")
+            )
+
+        kwargs: dict[str, object] = {"name": name}
+        if category is not None:
+            kwargs["category"] = category
+
+        if user_limit is not None:
+            limit_value = max(0, min(int(user_limit), 99))
+            kwargs["user_limit"] = limit_value
+
+        if bitrate is not None:
+            bitrate_value = int(bitrate)
+            max_bitrate = getattr(guild, "bitrate_limit", 96000) or 96000
+            bitrate_value = max(8000, min(bitrate_value, max_bitrate))
+            kwargs["bitrate"] = bitrate_value
+
+        channel = await _call_discord(
+            "create channel",
+            guild.create_voice_channel(reason=reason, **kwargs),
+        )
+        return f"Created voice channel {channel.name} (ID: {channel.id})."
+
+    @server.tool()
+    async def create_stage_channel(
+        name: str,
+        server_id: str | int | None = None,
+        category_id: str | int | None = None,
+        topic: str | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Create a new stage channel for events and announcements."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        category = None
+        if category_id is not None:
+            category = await _ensure_category(
+                bot, guild, _require_int(category_id, "category_id")
+            )
+
+        kwargs: dict[str, object] = {"name": name}
+        if category is not None:
+            kwargs["category"] = category
+        if topic is not None:
+            kwargs["topic"] = topic
+
+        channel = await _call_discord(
+            "create channel",
+            guild.create_stage_channel(reason=reason, **kwargs),
+        )
+        return f"Created stage channel {channel.name} (ID: {channel.id})."
+
+    @server.tool()
+    async def create_category(
+        name: str,
+        server_id: str | int | None = None,
+        position: int | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Create a new channel category."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        kwargs: dict[str, object] = {"name": name}
+        if position is not None:
+            kwargs["position"] = int(position)
+
+        category = await _call_discord(
+            "create category",
+            guild.create_category(reason=reason, **kwargs),
+        )
+        return f"Created category {category.name} (ID: {category.id})."
+
+    @server.tool()
+    async def update_channel(
+        channel_id: str | int,
+        name: str | None = None,
+        category_id: str | int | None = None,
+        position: int | None = None,
+        topic: str | None = None,
+        nsfw: bool | str | int | None = None,
+        slowmode_delay: int | None = None,
+        user_limit: int | None = None,
+        bitrate: int | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Update channel settings such as name, topic, and category."""
+
+        assert ctx is not None
+        bot, _ = await _acquire(ctx)
+        channel = await _call_discord(
+            "fetch channel", bot.fetch_channel(_require_int(channel_id, "channel_id"))
+        )
+
+        updates: dict[str, object] = {}
+        if name is not None:
+            new_name = name.strip()
+            if not new_name:
+                raise DiscordToolError("Channel name cannot be empty.")
+            updates["name"] = new_name
+
+        if position is not None:
+            updates["position"] = int(position)
+
+        if category_id is not None:
+            if not hasattr(channel, "guild") or channel.guild is None:
+                raise DiscordToolError("Cannot move a channel without an associated guild.")
+            category = await _ensure_category(
+                bot, channel.guild, _require_int(category_id, "category_id")
+            )
+            updates["category"] = category
+
+        if topic is not None:
+            if isinstance(channel, (discord.TextChannel, discord.StageChannel, discord.ForumChannel)):
+                updates["topic"] = topic
+            else:
+                raise DiscordToolError("Only text, forum, or stage channels support topics.")
+
+        if nsfw is not None:
+            nsfw_value = _parse_optional_bool(nsfw, "nsfw")
+            if isinstance(channel, (discord.TextChannel, discord.StageChannel, discord.ForumChannel)):
+                updates["nsfw"] = nsfw_value
+            else:
+                raise DiscordToolError("NSFW can only be set on text, forum, or stage channels.")
+
+        if slowmode_delay is not None:
+            if isinstance(channel, discord.TextChannel):
+                updates["slowmode_delay"] = max(0, min(int(slowmode_delay), 21600))
+            else:
+                raise DiscordToolError("Slowmode is only supported on text channels.")
+
+        if user_limit is not None:
+            if isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+                updates["user_limit"] = max(0, min(int(user_limit), 99))
+            else:
+                raise DiscordToolError("User limit can only be set on voice or stage channels.")
+
+        if bitrate is not None:
+            if isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+                bitrate_value = int(bitrate)
+                max_bitrate = getattr(channel.guild, "bitrate_limit", 96000) or 96000
+                updates["bitrate"] = max(8000, min(bitrate_value, max_bitrate))
+            else:
+                raise DiscordToolError("Bitrate can only be set on voice or stage channels.")
+
+        if not updates:
+            raise DiscordToolError("Provide at least one field to update.")
+
+        await _call_discord("update channel", channel.edit(reason=reason, **updates))
+        return f"Updated channel {channel.id}."
 
     @server.tool()
     async def delete_channel(channel_id: str | int, reason: str | None = None, ctx: Context = None) -> str:  # type: ignore[override]
@@ -617,6 +1019,186 @@ def create_server() -> FastMCP:
         channel = await _call_discord("fetch channel", bot.fetch_channel(_require_int(channel_id, "channel_id")))
         await _call_discord("delete channel", channel.delete(reason=reason))
         return f"Deleted channel {channel_id}."
+
+    @server.tool()
+    async def create_invite(
+        channel_id: str | int,
+        max_age_seconds: int | None = None,
+        max_uses: int | None = None,
+        temporary: bool | str | int | None = None,
+        unique: bool | str | int | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Create an invite link for a channel."""
+
+        assert ctx is not None
+        bot, _ = await _acquire(ctx)
+        channel = await _ensure_channel(bot, _require_int(channel_id, "channel_id"))
+
+        kwargs: dict[str, object] = {}
+        if max_age_seconds is not None:
+            kwargs["max_age"] = max(0, int(max_age_seconds))
+        if max_uses is not None:
+            kwargs["max_uses"] = max(0, int(max_uses))
+        if temporary is not None:
+            kwargs["temporary"] = _parse_optional_bool(temporary, "temporary")
+        if unique is not None:
+            kwargs["unique"] = _parse_optional_bool(unique, "unique")
+
+        invite = await _call_discord(
+            "create invite", channel.create_invite(reason=reason, **kwargs)
+        )
+        return f"Created invite {invite.url} for channel {channel.id}."
+
+    @server.tool()
+    async def list_invites(server_id: str | int | None = None, ctx: Context = None) -> str:  # type: ignore[override]
+        """List active invites for a server."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        invites = await _call_discord("list invites", guild.invites())
+        if not invites:
+            return f"No active invites found for {guild.name}."
+
+        lines = [f"**Active invites for {guild.name}:**"]
+        for invite in invites:
+            inviter = invite.inviter.display_name if invite.inviter else "Unknown"
+            expires = _format_timestamp(invite.expires_at) if invite.expires_at else "No expiry"
+            usage = f"{invite.uses or 0}/{invite.max_uses or '∞'} uses"
+            lines.append(
+                f"• {invite.code} – Channel: {getattr(invite.channel, 'name', invite.channel_id)} – "
+                f"Inviter: {inviter} – Expires: {expires} – {usage}"
+            )
+
+        return "\n".join(lines)
+
+    @server.tool()
+    async def create_role(
+        name: str,
+        server_id: str | int | None = None,
+        color: str | int | None = None,
+        colour: str | int | None = None,
+        hoist: bool | str | int | None = None,
+        mentionable: bool | str | int | None = None,
+        permissions: Sequence[str] | None = None,
+        permissions_value: str | int | None = None,
+        unicode_emoji: str | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Create a new role in the specified server."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        colour_value = colour if colour is not None else color
+        role_colour = _parse_colour(colour_value, name="color") if colour_value is not None else None
+        hoist_value = _parse_optional_bool(hoist, "hoist")
+        mentionable_value = _parse_optional_bool(mentionable, "mentionable")
+        permission_obj = _parse_permissions(permissions, permissions_value)
+
+        kwargs: dict[str, object] = {"name": name}
+        if role_colour is not None:
+            kwargs["colour"] = role_colour
+        if hoist_value is not None:
+            kwargs["hoist"] = hoist_value
+        if mentionable_value is not None:
+            kwargs["mentionable"] = mentionable_value
+        if permission_obj is not None:
+            kwargs["permissions"] = permission_obj
+        if unicode_emoji is not None:
+            kwargs["unicode_emoji"] = unicode_emoji
+
+        role = await _call_discord(
+            "create role",
+            guild.create_role(reason=reason, **kwargs),
+        )
+        return f"Created role {role.name} (ID: {role.id})."
+
+    @server.tool()
+    async def edit_role(
+        role_id: str | int,
+        server_id: str | int | None = None,
+        name: str | None = None,
+        color: str | int | None = None,
+        colour: str | int | None = None,
+        hoist: bool | str | int | None = None,
+        mentionable: bool | str | int | None = None,
+        permissions: Sequence[str] | None = None,
+        permissions_value: str | int | None = None,
+        position: int | None = None,
+        unicode_emoji: str | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Update the configuration of an existing role."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        role = await _ensure_role(guild, _require_int(role_id, "role_id"))
+
+        updates: dict[str, object] = {}
+        if name is not None:
+            new_name = name.strip()
+            if not new_name:
+                raise DiscordToolError("Role name cannot be empty.")
+            updates["name"] = new_name
+
+        colour_value = colour if colour is not None else color
+        if colour_value is not None:
+            updates["colour"] = _parse_colour(colour_value, name="color")
+
+        hoist_value = _parse_optional_bool(hoist, "hoist")
+        if hoist_value is not None:
+            updates["hoist"] = hoist_value
+
+        mentionable_value = _parse_optional_bool(mentionable, "mentionable")
+        if mentionable_value is not None:
+            updates["mentionable"] = mentionable_value
+
+        permission_obj = _parse_permissions(permissions, permissions_value)
+        if permission_obj is not None:
+            updates["permissions"] = permission_obj
+
+        if position is not None:
+            updates["position"] = int(position)
+
+        if unicode_emoji is not None:
+            updates["unicode_emoji"] = unicode_emoji
+
+        if not updates:
+            raise DiscordToolError("Provide at least one field to update for the role.")
+
+        await _call_discord("update role", role.edit(reason=reason, **updates))
+        return f"Updated role {role.name} (ID: {role.id})."
+
+    @server.tool()
+    async def delete_role(
+        role_id: str | int,
+        server_id: str | int | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Delete a role from the server."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        role = await _ensure_role(guild, _require_int(role_id, "role_id"))
+        role_name = role.name
+        await _call_discord("delete role", role.delete(reason=reason))
+        return f"Deleted role {role_name} (ID: {role.id})."
 
     @server.tool()
     async def add_role(
@@ -633,10 +1215,8 @@ def create_server() -> FastMCP:
         guild_id = _resolve_guild_id(config, server_id)
         guild = await _ensure_guild(bot, guild_id)
 
-        member = await _call_discord("fetch member", guild.fetch_member(_require_int(user_id, "user_id")))
-        role = guild.get_role(_require_int(role_id, "role_id"))
-        if role is None:
-            raise DiscordToolError("Role not found in the specified server.")
+        member = await _ensure_member(guild, _require_int(user_id, "user_id"))
+        role = await _ensure_role(guild, _require_int(role_id, "role_id"))
 
         await _call_discord("add role", member.add_roles(role, reason=reason))
         return f"Added role {role.name} to {member.display_name}."
@@ -656,13 +1236,143 @@ def create_server() -> FastMCP:
         guild_id = _resolve_guild_id(config, server_id)
         guild = await _ensure_guild(bot, guild_id)
 
-        member = await _call_discord("fetch member", guild.fetch_member(_require_int(user_id, "user_id")))
-        role = guild.get_role(_require_int(role_id, "role_id"))
-        if role is None:
-            raise DiscordToolError("Role not found in the specified server.")
+        member = await _ensure_member(guild, _require_int(user_id, "user_id"))
+        role = await _ensure_role(guild, _require_int(role_id, "role_id"))
 
         await _call_discord("remove role", member.remove_roles(role, reason=reason))
         return f"Removed role {role.name} from {member.display_name}."
+
+    @server.tool()
+    async def kick_member(
+        user_id: str | int,
+        server_id: str | int | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Kick a member from the server."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        member = await _ensure_member(guild, _require_int(user_id, "user_id"))
+        display = member.display_name
+        await _call_discord("kick member", member.kick(reason=reason))
+        return f"Kicked {display} ({member.id}) from {guild.name}."
+
+    @server.tool()
+    async def ban_member(
+        user_id: str | int,
+        server_id: str | int | None = None,
+        delete_message_seconds: int | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Ban a user from the server."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        delete_seconds = None
+        if delete_message_seconds is not None:
+            delete_seconds = max(0, min(int(delete_message_seconds), 604800))
+
+        try:
+            member = await _ensure_member(guild, _require_int(user_id, "user_id"))
+            target = member
+        except DiscordToolError:
+            target = await _call_discord(
+                "fetch user", bot.fetch_user(_require_int(user_id, "user_id"))
+            )
+
+        await _call_discord(
+            "ban member",
+            guild.ban(target, reason=reason, delete_message_seconds=delete_seconds),
+        )
+        display = target.display_name if hasattr(target, "display_name") else str(target)
+        return f"Banned {display} ({target.id}) from {guild.name}."
+
+    @server.tool()
+    async def unban_member(
+        user_id: str | int,
+        server_id: str | int | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Remove a ban for a user."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        user = await _call_discord("fetch user", bot.fetch_user(_require_int(user_id, "user_id")))
+        await _call_discord("unban member", guild.unban(user, reason=reason))
+        return f"Unbanned {user.display_name} ({user.id}) from {guild.name}."
+
+    @server.tool()
+    async def list_bans(
+        server_id: str | int | None = None,
+        limit: int = 20,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """List banned users for the server."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        limit = max(1, min(limit, 100))
+        entries: list[discord.guild.BanEntry] = []
+        try:
+            async for entry in guild.bans(limit=None):
+                entries.append(entry)
+                if len(entries) >= limit:
+                    break
+        except discord.DiscordException as exc:
+            raise _describe_discord_error("list bans", exc) from exc
+
+        if not entries:
+            return f"No banned users found for {guild.name}."
+
+        lines = [f"**Banned users for {guild.name} (showing {len(entries)}):**"]
+        for entry in entries:
+            user = entry.user
+            reason_text = entry.reason or "No reason provided"
+            lines.append(f"• {user.display_name} ({user.id}) – Reason: {reason_text}")
+
+        return "\n".join(lines)
+
+    @server.tool()
+    async def timeout_member(
+        user_id: str | int,
+        server_id: str | int | None = None,
+        duration_minutes: int | None = None,
+        reason: str | None = None,
+        ctx: Context = None,
+    ) -> str:  # type: ignore[override]
+        """Apply or clear a communication timeout for a member."""
+
+        assert ctx is not None
+        bot, config = await _acquire(ctx)
+        guild_id = _resolve_guild_id(config, server_id)
+        guild = await _ensure_guild(bot, guild_id)
+
+        member = await _ensure_member(guild, _require_int(user_id, "user_id"))
+        if duration_minutes is None or duration_minutes <= 0:
+            until = None
+            action = "Cleared timeout"
+        else:
+            duration = max(1, int(duration_minutes))
+            until = datetime.now(tz=UTC) + timedelta(minutes=duration)
+            action = f"Timed out for {duration} minute(s)"
+
+        await _call_discord("timeout member", member.timeout(until=until, reason=reason))
+        return f"{action} for {member.display_name} ({member.id})."
 
     @server.tool()
     async def moderate_message(
