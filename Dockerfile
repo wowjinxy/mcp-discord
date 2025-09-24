@@ -25,6 +25,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.12-slim-bookworm
 
+# Create a non-root user that will own the application files.
+RUN groupadd --system app \
+    && useradd --system --gid app --create-home app
+
 WORKDIR /app
 
 COPY --from=uv /root/.local /root/.local
@@ -32,6 +36,8 @@ COPY --from=uv --chown=app:app /app/.venv /app/.venv
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
+
+USER app
 
 # Set the environment variable for the Discord bot token
 ENV DISCORD_TOKEN=your_bot_token
